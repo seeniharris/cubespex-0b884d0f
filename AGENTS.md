@@ -8,3 +8,4 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+- CubeTime logic (timer state machine, stats, storage, scrambles) lives as pure modules in src/lib/cube; UI in src/components/cube — keeps rules unit-testable.
