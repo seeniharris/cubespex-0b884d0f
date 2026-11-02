@@ -232,7 +232,7 @@ function App({ data, setData }: { data: AppData; setData: (f: (d: AppData) => Ap
       {/* top bar */}
       <header className={cn("flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 transition-opacity sm:px-5", focusMode && "pointer-events-none opacity-0")}>
         <div className="mr-2 flex items-center gap-2 font-mono text-sm font-bold tracking-tight">
-          <span className="inline-block h-3 w-3 rounded-sm bg-primary" aria-hidden /> CubeTime
+          <span className="inline-block h-3 w-3 rounded-sm bg-primary" aria-hidden /> CubeSpex
         </div>
         <label className="sr-only" htmlFor="event">Event</label>
         <select id="event" value={data.event} onChange={(e) => changeEvent(e.target.value)} className="rounded-md border border-input bg-secondary px-2 py-1.5 text-sm">
@@ -505,7 +505,7 @@ function GuideModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     ["Touch & hold", "Same as Space on phones/tablets"],
   ];
   return (
-    <Modal open={open} onClose={onClose} title="Welcome to CubeTime">
+    <Modal open={open} onClose={onClose} title="Welcome to CubeSpex">
       <div className="space-y-4 text-sm">
         <p className="text-muted-foreground">A competition-style timer. Scramble your puzzle with the scramble shown, then:</p>
         <dl className="space-y-2">

@@ -59,7 +59,7 @@ const EVENT_IDS = new Set(EVENTS.map((e) => e.id));
 
 /** Validate untrusted data; throws Error with a readable message. */
 export function validateData(raw: unknown): AppData {
-  if (!raw || typeof raw !== "object") throw new Error("File is not a CubeTime JSON export.");
+  if (!raw || typeof raw !== "object") throw new Error("File is not a CubeSpex JSON export.");
   const r = raw as Record<string, unknown>;
   if (r.version !== 1) throw new Error("Unsupported or missing version (expected 1).");
   if (!Array.isArray(r.sessions)) throw new Error("Missing sessions list.");
