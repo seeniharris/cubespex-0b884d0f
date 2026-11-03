@@ -19,7 +19,7 @@ function download(name: string, text: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function CubeTime() {
+export function CubeSpex() {
   const [data, setData] = useState<AppData | null>(null);
   useEffect(() => { setData(loadData()); }, []);
   useEffect(() => { if (data) saveData(data); }, [data]);
@@ -588,7 +588,7 @@ function DataModal({ open, onClose, data, onImport }: { open: boolean; onClose: 
           <Btn onClick={() => download(`cubetime-${stamp}.csv`, toCSV(data), "text/csv")}>Export CSV</Btn>
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs uppercase tracking-widest text-muted-foreground">Import CubeTime JSON</span>
+          <span className="mb-1 block text-xs uppercase tracking-widest text-muted-foreground">Import CubeSpex JSON</span>
           <input type="file" accept="application/json,.json" className="text-sm file:mr-3 file:rounded-md file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-foreground"
             onChange={async (e) => {
               const f = e.target.files?.[0]; e.target.value = "";
