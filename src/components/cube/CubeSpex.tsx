@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Btn, Modal, Toggle, inputCls } from "./ui";
+import { AccountButton } from "./Account";
 import { EVENTS, generateScramble, type Scramble } from "@/lib/cube/scramble";
 import {
   bestAverage, bestSingle, combinePenalty, currentAverage, finalMs, formatMs, formatSolve, mean, parseTime,
@@ -244,6 +245,7 @@ function App({ data, setData }: { data: AppData; setData: (f: (d: AppData) => Ap
           <Btn variant="ghost" onClick={() => setModal("data")} aria-label="Import or export data" title="Import / export">⇅</Btn>
           <Btn variant="ghost" onClick={() => setModal("guide")} aria-label="Quick guide" title="Guide">?</Btn>
           <Btn variant="ghost" onClick={() => setModal("settings")} aria-label="Settings" title="Settings">⚙</Btn>
+          <AccountButton />
         </div>
       </header>
 
