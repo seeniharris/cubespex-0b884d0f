@@ -112,3 +112,14 @@ describe("practice scrambles", () => {
     for (let i = 1; i < m.length; i++) expect(m[i][0]).not.toBe(m[i - 1][0]);
   });
 });
+
+import { usernameError, normalizeUsername } from "@/lib/cube/account";
+describe("username rules", () => {
+  it("lowercases", () => expect(normalizeUsername(" Feliks_Z ")).toBe("feliks_z"));
+  it("rejects too short / bad chars", () => {
+    expect(usernameError("ab")).not.toBeNull();
+    expect(usernameError("bad-name")).not.toBeNull();
+    expect(usernameError("a".repeat(21))).not.toBeNull();
+  });
+  it("accepts valid", () => expect(usernameError("cuber_123")).toBeNull());
+});
