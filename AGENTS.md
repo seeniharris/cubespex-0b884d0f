@@ -9,3 +9,4 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 - CubeTime logic (timer state machine, stats, storage, scrambles) lives as pure modules in src/lib/cube; UI in src/components/cube — keeps rules unit-testable.
+- Accounts are optional: auth UI lives in src/components/cube/Account.tsx; profiles are created by a DB trigger on signup, username rules in src/lib/cube/account.ts mirror the DB check — local solve data never depends on sign-in.
