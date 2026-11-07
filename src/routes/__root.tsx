@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AccountSessionProvider } from "@/components/cube/AccountSession";
 
 function NotFoundComponent() {
   return (
@@ -119,7 +120,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <AccountSessionProvider><Outlet /></AccountSessionProvider>
     </QueryClientProvider>
   );
 }
