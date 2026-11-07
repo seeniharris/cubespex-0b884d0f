@@ -145,7 +145,7 @@
   fill: none;
   stroke: var(--signin-trace);
   stroke-width: 1.5px;
-  stroke-dasharray: 12 88;
+  stroke-dasharray: 50 50;
   animation: account-border-trace 3s linear infinite;
   filter: drop-shadow(0 0 3px var(--signin-trace));
 }
