@@ -8,6 +8,13 @@
       "when": 1793963936718,
       "tag": "0000_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794016751903,
+      "tag": "0001_google_profile_signup",
+      "breakpoints": true
     }
   ]
 }

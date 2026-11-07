@@ -90,9 +90,18 @@
   --chart-5: oklch(0.7 0.12 200);
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --signin-text: oklch(1 0 0);
+  --signin-background: oklch(0.145 0.004 120);
+  --signin-trace: oklch(0.89 0.22 128);
+  --google-background: #131314;
+  --google-border: #8e918f;
+  --google-text: #e3e3e3;
 }
 
 .light {
+  --google-background: #ffffff;
+  --google-border: #747775;
+  --google-text: #1f1f1f;
   --background: oklch(0.985 0.004 120);
   --foreground: oklch(0.16 0.01 120);
   --card: oklch(1 0 0);
@@ -121,6 +130,29 @@
 }
 
 @utility tabular { font-variant-numeric: tabular-nums; }
+
+.account-signin {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--signin-background);
+  color: var(--signin-text);
+  font-weight: 700;
+}
+.account-signin:hover { background: var(--signin-background); color: var(--signin-text); }
+.account-signin-trace { position: absolute; inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); overflow: visible; pointer-events: none; }
+.account-signin-trace rect {
+  fill: none;
+  stroke: var(--signin-trace);
+  stroke-width: 1.5px;
+  stroke-dasharray: 12 88;
+  animation: account-border-trace 3s linear infinite;
+  filter: drop-shadow(0 0 3px var(--signin-trace));
+}
+@keyframes account-border-trace { to { stroke-dashoffset: -100; } }
+.google-signin { background: var(--google-background); color: var(--google-text); border: 1px solid var(--google-border); gap: 10px; padding-inline: 12px; font-weight: 500; }
+.google-signin:hover { background: var(--google-background); color: var(--google-text); }
+@media (prefers-reduced-motion: reduce) { .account-signin-trace rect { animation: none !important; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
