@@ -11,17 +11,35 @@ const variants: Record<Variant, string> = {
   chipActive: "border border-primary bg-primary/15 text-primary",
 };
 
-export function Btn({ variant = "default", className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
+export function Btn({
+  variant = "default",
+  className,
+  ...p
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
   return (
     <button
       type="button"
       {...p}
-      className={cn("inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-40", variants[variant], className)}
+      className={cn(
+        "inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-40",
+        variants[variant],
+        className,
+      )}
     />
   );
 }
 
-export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -29,15 +47,30 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
     ref.current?.querySelector<HTMLElement>("input,button,select,textarea")?.focus();
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k);
-    return () => { window.removeEventListener("keydown", k); prev?.focus?.(); };
+    return () => {
+      window.removeEventListener("keydown", k);
+      prev?.focus?.();
+    };
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-background/80 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()} data-modal>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl border border-border bg-popover p-5 text-popover-foreground shadow-2xl sm:max-w-lg sm:rounded-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-background/80 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      data-modal
+    >
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl border border-border bg-popover p-5 text-popover-foreground shadow-2xl sm:max-w-lg sm:rounded-xl"
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <Btn variant="ghost" aria-label="Close" onClick={onClose}>✕</Btn>
+          <Btn variant="ghost" aria-label="Close" onClick={onClose}>
+            ✕
+          </Btn>
         </div>
         {children}
       </div>
@@ -45,19 +78,43 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
   );
 }
 
-export function Toggle({ label, checked, onChange, hint }: { label: string; checked: boolean; onChange: (v: boolean) => void; hint?: string }) {
+export function Toggle({
+  label,
+  checked,
+  onChange,
+  hint,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  hint?: string;
+}) {
   return (
     <label className="flex cursor-pointer items-center justify-between gap-4 py-2">
       <span>
         <span className="block text-sm">{label}</span>
         {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
       </span>
-      <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
-        className={cn("relative h-6 w-11 shrink-0 rounded-full border border-border transition-colors", checked ? "bg-primary" : "bg-muted")}>
-        <span className={cn("absolute top-0.5 h-4.5 w-4.5 rounded-full bg-foreground transition-all", checked ? "left-5.5 bg-primary-foreground" : "left-0.5")} />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative h-6 w-11 shrink-0 rounded-full border border-border transition-colors",
+          checked ? "bg-primary" : "bg-muted",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 h-4.5 w-4.5 rounded-full bg-foreground transition-all",
+            checked ? "left-5.5 bg-primary-foreground" : "left-0.5",
+          )}
+        />
       </button>
     </label>
   );
 }
 
-export const inputCls = "w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono";
+export const inputCls =
+  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono";

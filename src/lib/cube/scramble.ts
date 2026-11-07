@@ -26,7 +26,7 @@ export interface Scramble {
   source: "official" | "practice";
 }
 
-const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 
 /** Random-move scramble for NxN; avoids same-face repeats and redundant same-axis triples. */
 function nxn(n: number, len: number): string {
@@ -52,22 +52,40 @@ function nxn(n: number, len: number): string {
 
 export function practiceScramble(event: string): string {
   switch (event) {
-    case "222": return nxn(2, 11);
-    case "444": return nxn(4, 40);
-    case "555": return nxn(5, 60);
-    case "666": return nxn(6, 80);
-    case "777": return nxn(7, 100);
+    case "222":
+      return nxn(2, 11);
+    case "444":
+      return nxn(4, 40);
+    case "555":
+      return nxn(5, 60);
+    case "666":
+      return nxn(6, 80);
+    case "777":
+      return nxn(7, 100);
     case "pyram": {
       const base = nxn(2, 0);
       const mv: string[] = [];
       let p = "";
-      while (mv.length < 10) { const f = pick(["U", "L", "R", "B"]); if (f === p) continue; p = f; mv.push(f + pick(["", "'"])); }
-      const tips = ["u", "l", "r", "b"].filter(() => Math.random() < 0.5).map((t) => t + pick(["", "'"]));
+      while (mv.length < 10) {
+        const f = pick(["U", "L", "R", "B"]);
+        if (f === p) continue;
+        p = f;
+        mv.push(f + pick(["", "'"]));
+      }
+      const tips = ["u", "l", "r", "b"]
+        .filter(() => Math.random() < 0.5)
+        .map((t) => t + pick(["", "'"]));
       return [base, ...mv, ...tips].filter(Boolean).join(" ");
     }
     case "skewb": {
-      const mv: string[] = []; let p = "";
-      while (mv.length < 11) { const f = pick(["R", "U", "L", "B"]); if (f === p) continue; p = f; mv.push(f + pick(["", "'"])); }
+      const mv: string[] = [];
+      let p = "";
+      while (mv.length < 11) {
+        const f = pick(["R", "U", "L", "B"]);
+        if (f === p) continue;
+        p = f;
+        mv.push(f + pick(["", "'"]));
+      }
       return mv.join(" ");
     }
     case "minx": {
@@ -82,15 +100,27 @@ export function practiceScramble(event: string): string {
     }
     case "clock": {
       const pins = ["UR", "DR", "DL", "UL", "U", "R", "D", "L", "ALL"];
-      const a = pins.map((p) => { const v = Math.floor(Math.random() * 12) - 5; return `${p}${Math.abs(v)}${v < 0 ? "-" : "+"}`; });
-      return [...a, "y2", ...["U", "R", "D", "L", "ALL"].map((p) => { const v = Math.floor(Math.random() * 12) - 5; return `${p}${Math.abs(v)}${v < 0 ? "-" : "+"}`; })].join(" ");
+      const a = pins.map((p) => {
+        const v = Math.floor(Math.random() * 12) - 5;
+        return `${p}${Math.abs(v)}${v < 0 ? "-" : "+"}`;
+      });
+      return [
+        ...a,
+        "y2",
+        ...["U", "R", "D", "L", "ALL"].map((p) => {
+          const v = Math.floor(Math.random() * 12) - 5;
+          return `${p}${Math.abs(v)}${v < 0 ? "-" : "+"}`;
+        }),
+      ].join(" ");
     }
     case "sq1": {
       const out: string[] = [];
-      for (let i = 0; i < 12; i++) out.push(`(${Math.floor(Math.random() * 12) - 5},${Math.floor(Math.random() * 12) - 5})`);
+      for (let i = 0; i < 12; i++)
+        out.push(`(${Math.floor(Math.random() * 12) - 5},${Math.floor(Math.random() * 12) - 5})`);
       return out.join(" / ");
     }
-    default: return nxn(3, 20);
+    default:
+      return nxn(3, 20);
   }
 }
 

@@ -1,6 +1,7 @@
 import { combinePenalty, inspectionPenalty, type Penalty } from "./stats";
 
-export type Phase = "idle" | "armInspect" | "inspecting" | "holding" | "ready" | "running" | "stopped";
+export type Phase =
+  "idle" | "armInspect" | "inspecting" | "holding" | "ready" | "running" | "stopped";
 
 export interface TimerState {
   phase: Phase;
@@ -73,12 +74,23 @@ export function reduceTimer(s: TimerState, e: TimerEvent, cfg: TimerConfig): Tim
   if (e.type === "release") {
     switch (s.phase) {
       case "armInspect":
-        return { state: { ...s, phase: "inspecting", inspectStart: e.t, warned: 0 }, cue: "inspect" };
+        return {
+          state: { ...s, phase: "inspecting", inspectStart: e.t, warned: 0 },
+          cue: "inspect",
+        };
       case "holding":
         return { state: { ...s, phase: inInspection ? "inspecting" : "idle" } };
       case "ready": {
-        const pen: Penalty = inInspection ? inspectionPenalty(e.t - (s.inspectStart as number)) : "none";
-        const next = { ...s, phase: "running" as Phase, startAt: e.t, inspectStart: null, _pen: pen };
+        const pen: Penalty = inInspection
+          ? inspectionPenalty(e.t - (s.inspectStart as number))
+          : "none";
+        const next = {
+          ...s,
+          phase: "running" as Phase,
+          startAt: e.t,
+          inspectStart: null,
+          _pen: pen,
+        };
         return { state: next, cue: "start" };
       }
       case "stopped":
@@ -96,7 +108,11 @@ export function reduceTimer(s: TimerState, e: TimerEvent, cfg: TimerConfig): Tim
     if (el >= 17000) {
       // Inspection over: DNF. If key still held, wait for release.
       return {
-        state: { ...initialTimer, phase: s.phase === "inspecting" ? "idle" : "stopped", lastTime: 0 },
+        state: {
+          ...initialTimer,
+          phase: s.phase === "inspecting" ? "idle" : "stopped",
+          lastTime: 0,
+        },
         finished: { time: 0, penalty: "DNF" },
         cue: "stop",
       };
