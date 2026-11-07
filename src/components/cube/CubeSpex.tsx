@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Btn, Modal, Toggle, inputCls } from "./ui";
 import { AccountButton } from "./Account";
+import { useAccountSession } from "./AccountSession";
 import { EVENTS, generateScramble, type Scramble } from "@/lib/cube/scramble";
 import {
   bestAverage, bestSingle, combinePenalty, currentAverage, finalMs, formatMs, formatSolve, mean, parseTime,
@@ -9,7 +10,29 @@ import {
 } from "@/lib/cube/stats";
 import { initialTimer, reduceTimer, runningPenalty, type TimerEvent, type TimerState } from "@/lib/cube/timer";
 import { playCue } from "@/lib/cube/sound";
-import { loadData, newSession, saveData, toCSV, uid, validateData, type AppData, type Settings } from "@/lib/cube/storage";
+import {
+  compactOperations,
+  mergeImportedData,
+  pushAccountChanges,
+  syncAccountData,
+  trackDataChanges,
+  type SyncResult,
+} from "@/lib/cube/cloud-sync";
+import { supabaseSyncApi, subscribeToAccountSolves } from "@/lib/cube/supabase-sync";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  loadAccountCache,
+  loadData,
+  newSession,
+  saveAccountCache,
+  saveData,
+  toCSV,
+  uid,
+  validateData,
+  type AppData,
+  type PendingSyncOperation,
+  type Settings,
+} from "@/lib/cube/storage";
 
 type Tab = "timer" | "stats" | "history";
 
@@ -21,19 +44,290 @@ function download(name: string, text: string, type: string) {
 }
 
 export function CubeSpex() {
+  const { user, loading: authLoading } = useAccountSession();
   const [data, setData] = useState<AppData | null>(null);
-  useEffect(() => { setData(loadData()); }, []);
-  useEffect(() => { if (data) saveData(data); }, [data]);
+  const [ready, setReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"local" | "loading" | "synced" | "pending" | "offline" | "error">("loading");
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [guestImportCount, setGuestImportCount] = useState(0);
+  const [syncRevision, setSyncRevision] = useState(0);
+  const dataRef = useRef<AppData | null>(null);
+  const accountRef = useRef<string | null>(null);
+  const pendingRef = useRef<PendingSyncOperation[]>([]);
+  const revisionRef = useRef(0);
+  const ownWriteIdsRef = useRef(new Map<string, number>());
+  const forceRefreshRef = useRef(false);
+  const syncRunnerRef = useRef<(refreshCloud?: boolean) => Promise<void>>(async () => {});
+
+  const guestData = () => loadData();
+  const countGuestHistory = (accountData: AppData, localData: AppData) => {
+    const knownSessions = new Set(accountData.sessions.map((session) => session.id));
+    const knownSolves = new Set(accountData.sessions.flatMap((session) => session.solves.map((solve) => solve.id)));
+    return localData.sessions.reduce((count, session) => {
+      const sessionMissing = !knownSessions.has(session.id) && (session.solves.length > 0 || localData.sessions.length > 1);
+      return count + Number(sessionMissing) + session.solves.filter((solve) => !knownSolves.has(solve.id)).length;
+    }, 0);
+  };
+
+  useEffect(() => {
+    let active = true;
+    const userId = authLoading ? null : user?.id ?? null;
+    accountRef.current = userId;
+    ownWriteIdsRef.current.clear();
+    forceRefreshRef.current = false;
+    dataRef.current = null;
+    pendingRef.current = [];
+    setData(null);
+    setReady(false);
+    setSyncError(null);
+    setSyncStatus(userId ? "loading" : authLoading ? "loading" : "local");
+    setGuestImportCount(0);
+    if (authLoading) return () => { active = false; };
+
+    if (!userId) {
+      const local = loadData();
+      if (active) {
+        dataRef.current = local;
+        setData(local);
+        setReady(true);
+        setSyncStatus("local");
+      }
+      return () => { active = false; };
+    }
+
+    const cache = loadAccountCache(userId);
+    pendingRef.current = cache.pending;
+    const localGuest = guestData();
+    const initialize = async () => {
+      try {
+        const result = navigator.onLine
+          ? await syncAccountData(userId, cache.data, cache.pending, supabaseSyncApi)
+          : { data: cache.data, pending: cache.pending, errors: [] };
+        if (!active || accountRef.current !== userId) return;
+        const nextCache = { data: result.data, pending: result.pending };
+        saveAccountCache(userId, nextCache);
+        pendingRef.current = result.pending;
+        dataRef.current = result.data;
+        setData(result.data);
+        setReady(true);
+        setGuestImportCount(countGuestHistory(result.data, localGuest));
+        setSyncError(result.errors[0] ?? null);
+        setSyncStatus(!navigator.onLine ? "offline" : result.errors.length ? "error" : result.pending.length ? "pending" : "synced");
+        if (result.errors.length || result.pending.length) setSyncRevision((revision) => revision + 1);
+      } catch (error) {
+        if (!active || accountRef.current !== userId) return;
+        dataRef.current = cache.data;
+        setData(cache.data);
+        setReady(true);
+        setGuestImportCount(countGuestHistory(cache.data, localGuest));
+        setSyncError(error instanceof Error ? error.message : "Cloud history could not be loaded.");
+        setSyncStatus(navigator.onLine ? "error" : "offline");
+        if (navigator.onLine) setSyncRevision((revision) => revision + 1);
+      }
+    };
+    void initialize();
+    return () => { active = false; };
+  }, [authLoading, user?.id]);
+
+  const updateAppData = useCallback((update: (current: AppData) => AppData) => {
+    const previous = dataRef.current;
+    if (!previous) return;
+    const next = update(previous);
+    const userId = accountRef.current;
+    if (userId) {
+      const tracked = trackDataChanges(previous, next);
+      const pending = compactOperations([...pendingRef.current, ...tracked.operations]);
+      pendingRef.current = pending;
+      dataRef.current = tracked.data;
+      saveAccountCache(userId, { data: tracked.data, pending });
+      setData(tracked.data);
+      setSyncStatus(navigator.onLine ? (pending.length ? "pending" : "synced") : "offline");
+      setSyncError(null);
+      if (tracked.operations.length) {
+        revisionRef.current++;
+        setSyncRevision(revisionRef.current);
+      }
+    } else {
+      dataRef.current = next;
+      saveData(next);
+      setData(next);
+    }
+  }, []);
+
+  const importGuestHistory = useCallback(() => {
+    const userId = accountRef.current;
+    const accountData = dataRef.current;
+    if (!userId || !accountData) return;
+    const imported = mergeImportedData(accountData, guestData());
+    if (!imported.operations.length) {
+      setGuestImportCount(0);
+      return;
+    }
+    const pending = compactOperations([...pendingRef.current, ...imported.operations]);
+    pendingRef.current = pending;
+    dataRef.current = imported.data;
+    saveAccountCache(userId, { data: imported.data, pending });
+    setData(imported.data);
+    setGuestImportCount(0);
+    setSyncStatus(navigator.onLine ? "pending" : "offline");
+    revisionRef.current++;
+    forceRefreshRef.current = true;
+    setSyncRevision(revisionRef.current);
+  }, []);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId || !ready || accountRef.current !== userId) return;
+    let active = true;
+    let inFlight = false;
+    let rerunRequested = false;
+    let refreshRequested = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let retryDelay = 1000;
+    const retry = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => void run(), retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 60000);
+    };
+    const run = async (refreshCloud = true) => {
+      if (!active || accountRef.current !== userId) return;
+      if (inFlight) {
+        rerunRequested = true;
+        refreshRequested ||= refreshCloud;
+        return;
+      }
+      if (!navigator.onLine) {
+        setSyncStatus("offline");
+        return;
+      }
+      const local = dataRef.current;
+      if (!local) return;
+      inFlight = true;
+      const revision = revisionRef.current;
+      try {
+        const cache = loadAccountCache(userId);
+        const pending = cache.pending;
+        for (const operation of pending) {
+          const key = `${operation.table}:${operation.id}`;
+          const expiry = Date.now() + 10000;
+          ownWriteIdsRef.current.set(key, expiry);
+          setTimeout(() => {
+            if (ownWriteIdsRef.current.get(key) === expiry) ownWriteIdsRef.current.delete(key);
+          }, 10000);
+        }
+        let result: SyncResult;
+        if (refreshCloud) {
+          result = await syncAccountData(userId, local, pending, supabaseSyncApi);
+        } else {
+          const pushed = await pushAccountChanges(userId, local, pending, supabaseSyncApi);
+          result = pushed.pending.length || pushed.errors.length
+            ? await syncAccountData(userId, local, pushed.pending, supabaseSyncApi)
+            : { data: local, pending: pushed.pending, errors: pushed.errors };
+          if (pushed.errors.length) result.errors.unshift(...pushed.errors);
+        }
+        if (!active || accountRef.current !== userId) return;
+        if (revision !== revisionRef.current) {
+          setSyncStatus("pending");
+          refreshTimer = setTimeout(() => void run(), 0);
+          return;
+        }
+        saveAccountCache(userId, { data: result.data, pending: result.pending });
+        pendingRef.current = result.pending;
+        dataRef.current = result.data;
+        setData(result.data);
+        setSyncError(result.errors[0] ?? null);
+        setSyncStatus(result.errors.length ? "error" : result.pending.length ? "pending" : "synced");
+        if (result.errors.length || result.pending.length) retry();
+        else retryDelay = 1000;
+      } catch (error) {
+        if (!active || accountRef.current !== userId) return;
+        setSyncError(error instanceof Error ? error.message : "Cloud history could not be synchronized.");
+        setSyncStatus("error");
+        retry();
+      } finally {
+        inFlight = false;
+        if (rerunRequested && active) {
+          const refresh = refreshRequested;
+          rerunRequested = false;
+          refreshRequested = false;
+          refreshTimer = setTimeout(() => void run(refresh), 0);
+        }
+      }
+    };
+    syncRunnerRef.current = run;
+    const channel = subscribeToAccountSolves(userId, (table, id) => {
+      const key = `${table}:${id}`;
+      const expiry = ownWriteIdsRef.current.get(key);
+      if (expiry && expiry >= Date.now()) {
+        ownWriteIdsRef.current.delete(key);
+        return;
+      }
+      ownWriteIdsRef.current.delete(key);
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => void run(), 300);
+    });
+    const onOnline = () => void run();
+    const onOffline = () => setSyncStatus("offline");
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("focus", onOnline);
+    return () => {
+      active = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("focus", onOnline);
+      void supabase.removeChannel(channel);
+      syncRunnerRef.current = async () => {};
+    };
+  }, [user?.id, ready]);
+
+  useEffect(() => {
+    if (!user?.id || !ready || !syncRevision) return;
+    const timer = setTimeout(() => {
+      const refreshCloud = forceRefreshRef.current;
+      forceRefreshRef.current = false;
+      void syncRunnerRef.current(refreshCloud);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [syncRevision, user?.id, ready]);
+
   useEffect(() => {
     if (!data) return;
     document.documentElement.classList.toggle("light", data.settings.theme === "light");
   }, [data?.settings.theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!data) return <div className="flex min-h-screen items-center justify-center font-mono text-muted-foreground">Loading…</div>;
-  return <App data={data} setData={setData as (f: (d: AppData) => AppData) => void} />;
+  const expectedUserId = authLoading ? undefined : user?.id ?? null;
+  if (!data || !ready || authLoading || accountRef.current !== expectedUserId) {
+    return <div className="flex min-h-screen items-center justify-center font-mono text-muted-foreground">Loading…</div>;
+  }
+  return (
+    <App
+      data={data}
+      setData={updateAppData}
+      syncStatus={user ? syncStatus : null}
+      syncError={syncError}
+      guestImportCount={user ? guestImportCount : 0}
+      onImportGuest={importGuestHistory}
+    />
+  );
 }
 
-function App({ data, setData }: { data: AppData; setData: (f: (d: AppData) => AppData) => void }) {
+function App({
+  data,
+  setData,
+  syncStatus,
+  syncError,
+  guestImportCount,
+  onImportGuest,
+}: {
+  data: AppData;
+  setData: (f: (d: AppData) => AppData) => void;
+  syncStatus: "local" | "loading" | "synced" | "pending" | "offline" | "error" | null;
+  syncError: string | null;
+  guestImportCount: number;
+  onImportGuest: () => void;
+}) {
   const s = data.settings;
   const session = data.sessions.find((x) => x.id === data.activeSession[data.event]) ?? data.sessions.find((x) => x.event === data.event);
   const solves = session?.solves ?? [];
@@ -241,6 +535,32 @@ function App({ data, setData }: { data: AppData; setData: (f: (d: AppData) => Ap
         </select>
         <Btn onClick={() => setModal("sessions")} aria-label="Manage sessions">{session?.name ?? "Session"} ▾</Btn>
         <div className="ml-auto flex items-center gap-1">
+          {syncStatus && (
+            <span
+              role="status"
+              title={syncError ?? undefined}
+              className={cn(
+                "px-1 text-[10px] sm:px-2 sm:text-xs",
+                syncStatus === "error" ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {syncStatus === "synced" ? "Synced" : syncStatus === "pending" ? "Syncing…" : syncStatus === "offline" ? "Offline" : syncStatus === "error" ? "Sync error" : "Connecting…"}
+            </span>
+          )}
+          {guestImportCount > 0 && (
+            <Btn
+              variant="ghost"
+              className="text-xs"
+              onClick={() => {
+                if (confirm(`Import ${guestImportCount} local session/solve record(s) into this account? Local history will remain on this device.`)) {
+                  onImportGuest();
+                }
+              }}
+              title="Import guest history into this account without deleting the local copy"
+            >
+              Import local history
+            </Btn>
+          )}
           <Btn variant="ghost" onClick={() => setModal("manual")} aria-label="Add time manually" title="Add time manually">＋ Time</Btn>
           <Btn variant="ghost" onClick={() => setModal("data")} aria-label="Import or export data" title="Import / export">⇅</Btn>
           <Btn variant="ghost" onClick={() => setModal("guide")} aria-label="Quick guide" title="Guide">?</Btn>
@@ -515,7 +835,7 @@ function GuideModal({ open, onClose }: { open: boolean; onClose: () => void }) {
             <div key={k} className="flex gap-3"><dt className="w-28 shrink-0 font-mono text-primary">{k}</dt><dd>{v}</dd></div>
           ))}
         </dl>
-        <p className="text-muted-foreground">Turn on WCA inspection in Settings. Tap a solve in History to edit it, add +2/DNF or delete. Everything is saved in this browser — use ⇅ to back up.</p>
+        <p className="text-muted-foreground">Turn on WCA inspection in Settings. Tap a solve in History to edit it, add +2/DNF or delete. History is saved locally and syncs to your account when signed in.</p>
         <Btn variant="primary" className="w-full py-2" onClick={onClose}>Start cubing</Btn>
       </div>
     </Modal>

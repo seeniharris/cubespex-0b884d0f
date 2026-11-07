@@ -15,6 +15,13 @@
       "when": 1794016751903,
       "tag": "0001_google_profile_signup",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794026797930,
+      "tag": "0002_account_solve_sync",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ export interface Solve {
   scramble: string;
   date: number;
   event: string;
+  updatedAt?: number;
 }
 
 export const DNF = Infinity;
@@ -76,7 +77,10 @@ export function formatMs(ms: number | null | undefined, precision: 2 | 3 = 2): s
   const total = precision === 3 ? Math.floor(ms) : Math.floor(ms / 10) * 10;
   const minutes = Math.floor(total / 60000);
   const secs = Math.floor((total % 60000) / 1000);
-  const frac = precision === 3 ? String(total % 1000).padStart(3, "0") : String(Math.floor((total % 1000) / 10)).padStart(2, "0");
+  const frac =
+    precision === 3
+      ? String(total % 1000).padStart(3, "0")
+      : String(Math.floor((total % 1000) / 10)).padStart(2, "0");
   return minutes > 0 ? `${minutes}:${String(secs).padStart(2, "0")}.${frac}` : `${secs}.${frac}`;
 }
 

@@ -7,6 +7,7 @@ export interface Session {
   event: string;
   solves: Solve[]; // oldest first
   created: number;
+  updatedAt?: number;
 }
 
 export interface Settings {
@@ -30,6 +31,19 @@ export interface AppData {
 }
 
 export const STORAGE_KEY = "cubetime:v1";
+const accountStorageKey = (userId: string) => `${STORAGE_KEY}:account:${userId}`;
+
+export interface PendingSyncOperation {
+  table: "session" | "solve";
+  id: string;
+  action: "upsert" | "insert" | "delete";
+  updatedAt: number;
+}
+
+export interface AccountCache {
+  data: AppData;
+  pending: PendingSyncOperation[];
+}
 
 export const defaultSettings: Settings = {
   inspection: false,
@@ -46,12 +60,19 @@ export const defaultSettings: Settings = {
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 export function newSession(event: string, name = "Session 1"): Session {
-  return { id: uid(), name, event, solves: [], created: Date.now() };
+  const now = Date.now();
+  return { id: uid(), name, event, solves: [], created: now, updatedAt: now };
 }
 
 export function defaultData(): AppData {
   const s = newSession("333");
-  return { version: 1, event: "333", activeSession: { "333": s.id }, sessions: [s], settings: { ...defaultSettings } };
+  return {
+    version: 1,
+    event: "333",
+    activeSession: { "333": s.id },
+    sessions: [s],
+    settings: { ...defaultSettings },
+  };
 }
 
 const PENALTIES: Penalty[] = ["none", "+2", "DNF"];
@@ -67,11 +88,18 @@ export function validateData(raw: unknown): AppData {
     const o = s as Record<string, unknown>;
     if (!o || typeof o.id !== "string" || typeof o.name !== "string" || typeof o.event !== "string")
       throw new Error(`Session #${i + 1} is malformed.`);
-    if (!EVENT_IDS.has(o.event)) throw new Error(`Session "${o.name}" has unknown event "${o.event}".`);
+    if (!EVENT_IDS.has(o.event))
+      throw new Error(`Session "${o.name}" has unknown event "${o.event}".`);
     if (!Array.isArray(o.solves)) throw new Error(`Session "${o.name}" has no solves array.`);
     const solves: Solve[] = o.solves.map((x: unknown, j: number) => {
       const v = x as Record<string, unknown>;
-      if (!v || typeof v.time !== "number" || !Number.isFinite(v.time) || v.time < 0 || !PENALTIES.includes(v.penalty as Penalty))
+      if (
+        !v ||
+        typeof v.time !== "number" ||
+        !Number.isFinite(v.time) ||
+        v.time < 0 ||
+        !PENALTIES.includes(v.penalty as Penalty)
+      )
         throw new Error(`Solve #${j + 1} in "${o.name}" is malformed.`);
       return {
         id: typeof v.id === "string" ? v.id : uid(),
@@ -80,18 +108,30 @@ export function validateData(raw: unknown): AppData {
         scramble: typeof v.scramble === "string" ? v.scramble : "",
         date: typeof v.date === "number" ? v.date : Date.now(),
         event: o.event as string,
+        ...(typeof v.updatedAt === "number" ? { updatedAt: v.updatedAt } : {}),
       };
     });
-    return { id: o.id, name: o.name, event: o.event as string, solves, created: typeof o.created === "number" ? o.created : Date.now() };
+    return {
+      id: o.id,
+      name: o.name,
+      event: o.event as string,
+      solves,
+      created: typeof o.created === "number" ? o.created : Date.now(),
+      ...(typeof o.updatedAt === "number" ? { updatedAt: o.updatedAt } : {}),
+    };
   });
   if (!sessions.length) throw new Error("File contains no sessions.");
-  const settings = { ...defaultSettings, ...(typeof r.settings === "object" && r.settings ? (r.settings as Partial<Settings>) : {}) };
+  const settings = {
+    ...defaultSettings,
+    ...(typeof r.settings === "object" && r.settings ? (r.settings as Partial<Settings>) : {}),
+  };
   const event = typeof r.event === "string" && EVENT_IDS.has(r.event) ? r.event : sessions[0].event;
   const activeSession: Record<string, string> = {};
   const act = (r.activeSession ?? {}) as Record<string, unknown>;
   for (const s of sessions) {
     const a = act[s.event];
-    if (typeof a === "string" && sessions.some((x) => x.id === a && x.event === s.event)) activeSession[s.event] = a;
+    if (typeof a === "string" && sessions.some((x) => x.id === a && x.event === s.event))
+      activeSession[s.event] = a;
     else activeSession[s.event] ??= s.id;
   }
   return { version: 1, event, activeSession, sessions, settings };
@@ -115,13 +155,58 @@ export function saveData(d: AppData) {
   }
 }
 
+export function loadAccountCache(userId: string): AccountCache {
+  try {
+    const raw = localStorage.getItem(accountStorageKey(userId));
+    if (!raw) return { data: defaultData(), pending: [] };
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") throw new Error("Invalid account cache.");
+    const value = parsed as { data?: unknown; pending?: unknown };
+    const data = validateData(value.data);
+    const pending = Array.isArray(value.pending)
+      ? value.pending.filter((item): item is PendingSyncOperation => {
+          if (!item || typeof item !== "object") return false;
+          const op = item as Partial<PendingSyncOperation>;
+          return (
+            (op.table === "session" || op.table === "solve") &&
+            typeof op.id === "string" &&
+            (op.action === "upsert" || op.action === "insert" || op.action === "delete") &&
+            typeof op.updatedAt === "number" &&
+            Number.isFinite(op.updatedAt)
+          );
+        })
+      : [];
+    return { data, pending };
+  } catch {
+    return { data: defaultData(), pending: [] };
+  }
+}
+
+export function saveAccountCache(userId: string, cache: AccountCache) {
+  try {
+    localStorage.setItem(accountStorageKey(userId), JSON.stringify(cache));
+  } catch {
+    /* quota exceeded — the pending queue remains in memory for this page */
+  }
+}
+
 export function toCSV(d: AppData): string {
   const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
   const rows = ["session,event,date,raw_ms,penalty,final_ms,scramble"];
   for (const s of d.sessions)
     for (const v of s.solves) {
       const fin = v.penalty === "DNF" ? "DNF" : String(v.penalty === "+2" ? v.time + 2000 : v.time);
-      rows.push([esc(s.name), s.event, new Date(v.date).toISOString(), v.time, v.penalty, fin, esc(v.scramble.replace(/\n/g, " "))].join(","));
+      rows.push(
+        [
+          esc(s.name),
+          s.event,
+          new Date(v.date).toISOString(),
+          v.time,
+          v.penalty,
+          fin,
+          esc(v.scramble.replace(/\n/g, " ")),
+        ].join(","),
+      );
     }
   return rows.join("\n");
 }
