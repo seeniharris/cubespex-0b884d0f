@@ -13,6 +13,15 @@ export function displayNameError(d: string): string | null {
   return d.trim().length > 40 ? "Display name must be 40 characters or fewer." : null;
 }
 
+export function googleDisplayName(user: {
+  app_metadata: { provider?: unknown };
+  user_metadata: Record<string, unknown>;
+}): string | null {
+  if (user.app_metadata.provider !== "google") return null;
+  const name = user.user_metadata.full_name ?? user.user_metadata.name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
 export function accountError(
   error: { message: string; code?: string },
   mode: "signup" | "signin" | "profile" | "forgot",

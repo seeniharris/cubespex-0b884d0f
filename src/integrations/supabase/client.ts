@@ -7,6 +7,21 @@ function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
 }
 
+function isSecretSupabaseApiKey(value: string): boolean {
+  if (value.startsWith("sb_secret_")) return true;
+  const payload = value.split(".")[1];
+  if (!payload) return false;
+
+  try {
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as {
+      role?: unknown;
+    };
+    return claims.role === "service_role";
+  } catch {
+    return false;
+  }
+}
+
 // The public URL can be reachable only from the browser, so server requests go to the runtime URL of the same backend.
 function serverSupabaseUrl(publicUrl: string, supabaseKey: string): string | undefined {
   if (typeof window !== "undefined" || typeof process === "undefined") return undefined;
@@ -55,20 +70,32 @@ function createSupabaseFetch(supabaseUrl: string, supabaseKey: string): typeof f
 }
 
 function createSupabaseClient() {
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering)
-  const SUPABASE_URL = import.meta.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"];
+  const isBrowser = typeof window !== "undefined";
+  const SUPABASE_URL =
+    import.meta.env["VITE_SUPABASE_URL"] ||
+    (!isBrowser ? process.env["SUPABASE_URL"] : undefined);
   const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] || process.env["SUPABASE_PUBLISHABLE_KEY"];
+    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
+    (!isBrowser ? process.env["SUPABASE_PUBLISHABLE_KEY"] : undefined);
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    const urlVariable = isBrowser ? "VITE_SUPABASE_URL" : "VITE_SUPABASE_URL or SUPABASE_URL";
+    const keyVariable = isBrowser
+      ? "VITE_SUPABASE_PUBLISHABLE_KEY"
+      : "VITE_SUPABASE_PUBLISHABLE_KEY or SUPABASE_PUBLISHABLE_KEY";
     const missing = [
-      ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
-      ...(!SUPABASE_PUBLISHABLE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
+      ...(!SUPABASE_URL ? [urlVariable] : []),
+      ...(!SUPABASE_PUBLISHABLE_KEY ? [keyVariable] : []),
     ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
+    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Configure the Supabase project URL and publishable key.`;
     console.error(`[Supabase] ${message}`);
     throw new Error(message);
+  }
+
+  if (isSecretSupabaseApiKey(SUPABASE_PUBLISHABLE_KEY)) {
+    throw new Error(
+      "A Supabase secret or service-role key cannot be used by the browser client. Set VITE_SUPABASE_PUBLISHABLE_KEY to the project's publishable key.",
+    );
   }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {

@@ -8,6 +8,7 @@ import { useAccountSession } from "./AccountSession";
 import {
   accountError,
   displayNameError,
+  googleDisplayName,
   normalizeUsername,
   usernameError,
 } from "@/lib/cube/account";
@@ -83,7 +84,7 @@ function AuthForm() {
         if (error) throw new Error(accountError(error, mode));
       } else if (mode === "forgot") {
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/reset-password`,
+          redirectTo: new URL("/reset-password", window.location.origin).toString(),
         });
         if (error) throw error;
         setMsg({
@@ -307,7 +308,7 @@ function ProfilePanel({ user, onDone }: { user: User; onDone: () => void }) {
         if (data) {
           setProfile(data);
           setUsername(data.username);
-          setDisplayName(data.display_name);
+          setDisplayName(data.display_name || googleDisplayName(user) || "");
         } else
           setMsg({
             ok: false,
@@ -383,7 +384,11 @@ function ProfilePanel({ user, onDone }: { user: User; onDone: () => void }) {
   };
   return (
     <form onSubmit={save} className="space-y-3" aria-busy={busy || loading}>
-      <p className="text-sm text-muted-foreground">Signed in as {user.email}</p>
+      <p className="text-sm text-muted-foreground">
+        Signed in as{" "}
+        {user.email ??
+          (typeof user.user_metadata.email === "string" ? user.user_metadata.email : "your account")}
+      </p>
       {profile && (
         <>
           <label className="block text-sm">

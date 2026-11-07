@@ -3,10 +3,32 @@ import {
   accountError,
   deletionConfirmation,
   hasRecoveryLink,
+  googleDisplayName,
   normalizeUsername,
 } from "@/lib/cube/account";
 
 describe("account rules", () => {
+  it("uses Google name metadata as a display name without using it as a username", () => {
+    expect(
+      googleDisplayName({
+        app_metadata: { provider: "google" },
+        user_metadata: { full_name: "  Alex Cubes  ", name: "Other", email: "alex@example.com" },
+      }),
+    ).toBe("Alex Cubes");
+    expect(
+      googleDisplayName({
+        app_metadata: { provider: "google" },
+        user_metadata: { name: "Alex Cubes" },
+      }),
+    ).toBe("Alex Cubes");
+    expect(
+      googleDisplayName({
+        app_metadata: { provider: "email" },
+        user_metadata: { full_name: "Alex Cubes" },
+      }),
+    ).toBeNull();
+  });
+
   it("normalizes usernames to unique lowercase handles", () =>
     expect(normalizeUsername(" My_Cuber ")).toBe("my_cuber"));
   it("does not mislabel unrelated signup failures as taken", () =>
