@@ -11,7 +11,14 @@ import {
   type Solve,
 } from "@/lib/cube/stats";
 import { initialTimer, reduceTimer, type TimerEvent, type TimerState } from "@/lib/cube/timer";
-import { defaultData, validateData } from "@/lib/cube/storage";
+import {
+  defaultData,
+  loadAccountCache,
+  loadData,
+  saveAccountCache,
+  saveData,
+  validateData,
+} from "@/lib/cube/storage";
 import { practiceScramble } from "@/lib/cube/scramble";
 
 const S = (time: number, penalty: Solve["penalty"] = "none"): Solve => ({
@@ -154,6 +161,22 @@ describe("persistence validation", () => {
         sessions: [{ id: "a", name: "x", event: "333", solves: [{ time: "x", penalty: "none" }] }],
       }),
     ).toThrow();
+  });
+});
+
+describe("local solve persistence", () => {
+  it("keeps guest history and each account's local history separate across reloads", () => {
+    const guest = defaultData();
+    guest.sessions[0].solves.push(S(1234));
+    const account = defaultData();
+    account.sessions[0].solves.push(S(5678));
+
+    saveData(guest);
+    saveAccountCache("user-a", { data: account, pending: [] });
+
+    expect(loadData().sessions[0].solves[0]?.time).toBe(1234);
+    expect(loadAccountCache("user-a").data.sessions[0].solves[0]?.time).toBe(5678);
+    expect(loadAccountCache("user-b").data.sessions[0].solves).toEqual([]);
   });
 });
 
