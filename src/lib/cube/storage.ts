@@ -121,10 +121,7 @@ export function validateData(raw: unknown): AppData {
     };
   });
   if (!sessions.length) throw new Error("File contains no sessions.");
-  const settings = {
-    ...defaultSettings,
-    ...(typeof r.settings === "object" && r.settings ? (r.settings as Partial<Settings>) : {}),
-  };
+  const settings = sanitizeSettings(r.settings);
   const event = typeof r.event === "string" && EVENT_IDS.has(r.event) ? r.event : sessions[0].event;
   const activeSession: Record<string, string> = {};
   const act = (r.activeSession ?? {}) as Record<string, unknown>;
@@ -135,6 +132,28 @@ export function validateData(raw: unknown): AppData {
     else activeSession[s.event] ??= s.id;
   }
   return { version: 1, event, activeSession, sessions, settings };
+}
+
+/** Keeps only valid setting values; anything else falls back to the default. */
+export function sanitizeSettings(raw: unknown): Settings {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const bool = (k: keyof Settings) =>
+    typeof s[k] === "boolean" ? (s[k] as boolean) : (defaultSettings[k] as boolean);
+  const hold = s.holdDelay;
+  return {
+    inspection: bool("inspection"),
+    holdDelay:
+      typeof hold === "number" && Number.isFinite(hold) && hold >= 0 && hold <= 2000
+        ? hold
+        : defaultSettings.holdDelay,
+    precision: s.precision === 3 ? 3 : s.precision === 2 ? 2 : defaultSettings.precision,
+    hideWhileRunning: bool("hideWhileRunning"),
+    sound: bool("sound"),
+    theme: s.theme === "light" ? "light" : s.theme === "dark" ? "dark" : defaultSettings.theme,
+    confirmDelete: bool("confirmDelete"),
+    confirmClear: bool("confirmClear"),
+    seenGuide: bool("seenGuide"),
+  };
 }
 
 export function loadData(): AppData {

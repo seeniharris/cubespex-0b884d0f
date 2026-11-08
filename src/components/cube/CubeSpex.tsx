@@ -586,7 +586,11 @@ function App({
             style={{ WebkitUserSelect: "none" }}
             onPointerDown={onPointerDown}
             onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
+            onPointerCancel={(e) => {
+              if (touchId.current !== e.pointerId) return;
+              touchId.current = null;
+              if (tRef.current.phase !== "running") dispatch({ type: "cancel" });
+            }}
             onContextMenu={(e) => e.preventDefault()}
             role="application"
             aria-label="Timer pad. Hold Space or touch and hold to arm; release to start."
