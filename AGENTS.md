@@ -13,3 +13,4 @@
 - AccountSessionProvider owns the single auth listener and recovery state; sign-out clears query caches but never timer storage, preventing competing session updates.
 - Self-account deletion uses authenticated server functions and a handler-only admin import; the target is always the verified caller, never a client-supplied ID.
 - Google uses the managed OAuth helper with a public same-origin return; the signup trigger assigns unique provisional social usernames, preserving email username validation.
+- Do not wire or retain a Supabase solve-sync adapter until its tables and RPCs exist; the app currently stores solves locally and the connected database contains profiles only.
